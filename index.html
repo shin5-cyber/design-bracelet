@@ -24,8 +24,8 @@
 </head>
 <body class="bg-gray-50 h-screen w-screen overflow-hidden flex flex-col md:flex-row text-gray-800">
 
-    <!-- 左側：操作パネル -->
-    <aside class="w-full md:w-96 bg-white border-r shadow-lg flex flex-col h-full z-20">
+    <!-- 左側：操作パネル (スマホ時は高さを半分に制限) -->
+    <aside class="w-full md:w-96 bg-white border-b md:border-b-0 md:border-r shadow-lg flex flex-col h-1/2 md:h-full z-20 shrink-0">
         <div class="p-4 bg-indigo-600 text-white shadow-md">
             <h1 class="text-xl font-bold">ブレスレットデザイン</h1>
             <p class="text-xs opacity-80 mt-1">3Dプレビュー＆カスタマイズ</p>
