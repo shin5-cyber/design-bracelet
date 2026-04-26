@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ブレスレット 3D デザイン</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; }
+        .canvas-container { cursor: grab; }
+        .canvas-container:active { cursor: grabbing; }
+        .mode-edit .canvas-container { cursor: pointer; }
+        .mode-insert .canvas-container { cursor: crosshair; }
+        .mode-delete .canvas-container { cursor: not-allowed; }
+        
+        /* スクロールバーのカスタマイズ */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen w-screen overflow-hidden flex flex-col md:flex-row text-gray-800">
+
+    <!-- 左側：操作パネル -->
+    <aside class="w-full md:w-96 bg-white border-r shadow-lg flex flex-col h-full z-20">
+        <div class="p-4 bg-indigo-600 text-white shadow-md">
+            <h1 class="text-xl font-bold">ブレスレットデザイン</h1>
+            <p class="text-xs opacity-80 mt-1">3Dプレビュー＆カスタマイズ</p>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 space-y-6">
+            
+            <!-- 1. 新規作成セクション -->
+            <section class="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
+                <h2 class="text-sm font-bold text-indigo-800 mb-3 flex items-center">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                    新規作成
+                </h2>
+                <div class="space-y-3 text-sm">
+                    <div>
+                        <label class="block text-gray-700 mb-1">内周 (cm) <span class="text-xs text-red-500">*必須</span></label>
+                        <input type="number" id="init-circumference" value="15" min="10" max="25" step="0.5" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-300 outline-none">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-gray-700 mb-1">石のサイズ</label>
+                            <select id="init-size" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-300 outline-none">
+                                <option value="6">6 mm</option>
+                                <option value="8" selected>8 mm</option>
+                                <option value="10">10 mm</option>
+                                <option value="12">12 mm</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 mb-1">天然石の種類</label>
+                            <select id="init-type" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-300 outline-none" onchange="updateInitColor()">
+                                <option value="crystal">水晶 (透明)</option>
+                                <option value="amethyst">アメジスト (紫)</option>
+                                <option value="rosequartz">ローズクォーツ (桃)</option>
+                                <option value="turquoise">ターコイズ (水色)</option>
+                                <option value="onyx">オニキス (黒)</option>
+                                <option value="tigereye">タイガーアイ (茶)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 mb-1">ベースの色</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="color" id="init-color" value="#ffffff" class="w-10 h-10 border rounded cursor-pointer">
+                            <span class="text-xs text-gray-500">※種類に合わせて自動設定されますが変更可能です</span>
+                        </div>
+                    </div>
+                    <button id="btn-generate" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded transition shadow">
+                        新しく生成する
+                    </button>
+                </div>
+            </section>
+
+            <!-- 2. 一括編集セクション -->
+            <section class="border border-gray-200 p-4 rounded-lg">
+                <h2 class="text-sm font-bold text-gray-800 mb-3 flex items-center">
+                    <svg class="w-4 h-4 mr-1 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    全体を一括変更
+                </h2>
+                <div class="space-y-3 text-sm">
+                    <div class="flex items-center space-x-2">
+                        <select id="bulk-size" class="flex-1 border rounded p-2">
+                            <option value="6">6 mm</option>
+                            <option value="8">8 mm</option>
+                            <option value="10">10 mm</option>
+                            <option value="12">12 mm</option>
+                        </select>
+                        <button id="btn-bulk-size" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 rounded text-xs font-bold">サイズ変更</button>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <select id="bulk-type" class="flex-1 border rounded p-2">
+                            <option value="crystal">水晶</option>
+                            <option value="amethyst">アメジスト</option>
+                            <option value="rosequartz">ローズクォーツ</option>
+                            <option value="turquoise">ターコイズ</option>
+                            <option value="onyx">オニキス</option>
+                            <option value="tigereye">タイガーアイ</option>
+                        </select>
+                        <button id="btn-bulk-type" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 rounded text-xs font-bold">種類変更</button>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <select id="bulk-color-target" class="w-20 border rounded p-2 text-xs outline-none">
+                            <option value="stone">石</option>
+                            <option value="rondelle">ロンデル</option>
+                        </select>
+                        <input type="color" id="bulk-color" value="#ffffff" class="w-10 h-10 border rounded cursor-pointer shrink-0">
+                        <button id="btn-bulk-color" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 rounded text-xs font-bold">色を一括変更</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. 内訳表示セクション -->
+            <section class="border border-gray-200 p-4 rounded-lg bg-gray-50">
+                <h2 class="text-sm font-bold text-gray-800 mb-2">パーツ内訳 (合計: <span id="summary-total">0</span> 個)</h2>
+                <div class="mb-3 text-sm text-indigo-700 font-semibold bg-indigo-100/50 p-2 rounded border border-indigo-200">
+                    推定内周: 約 <span id="summary-circumference">0.0</span> cm
+                </div>
+                <div id="summary-list" class="text-sm space-y-1 text-gray-600 max-h-40 overflow-y-auto">
+                    <!-- Javascriptで生成 -->
+                    <p class="text-gray-400 italic">パーツがありません</p>
+                </div>
+            </section>
+
+            <!-- 4. 保存・読込セクション -->
+            <section class="border border-gray-200 p-4 rounded-lg">
+                <h2 class="text-sm font-bold text-gray-800 mb-3 flex items-center">
+                    <svg class="w-4 h-4 mr-1 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                    エクスポート / インポート
+                </h2>
+                <div class="space-y-3 text-sm">
+                    <div>
+                        <label class="block text-gray-700 mb-1">デザイン名</label>
+                        <input type="text" id="design-name" value="無題のデザイン" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-300 outline-none">
+                    </div>
+                    <div class="flex space-x-2">
+                        <button id="btn-export" class="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-3 rounded text-xs transition flex items-center justify-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            書き出し
+                        </button>
+                        <button id="btn-import-trigger" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-3 rounded text-xs transition flex items-center justify-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            読み込み
+                        </button>
+                        <input type="file" id="file-import" accept=".json" class="hidden">
+                    </div>
+                </div>
+            </section>
+
+            <!-- データクリア -->
+            <button id="btn-clear-data" class="w-full text-red-500 hover:bg-red-50 py-2 border border-red-200 rounded text-sm transition">
+                すべてのデータを削除してリセット
+            </button>
+            <div class="h-10"></div> <!-- padding bottom -->
+        </div>
+    </aside>
+
+    <!-- 右側：3Dキャンバスとツールバー -->
+    <main class="flex-1 relative flex flex-col bg-white" id="main-area">
+        
+        <!-- 操作モードツールバー -->
+        <div class="absolute top-4 left-0 right-0 flex justify-center z-10 pointer-events-none">
+            <div class="bg-white/90 backdrop-blur shadow-lg rounded-full px-2 py-2 flex space-x-2 pointer-events-auto border border-gray-200">
+                <button id="btn-undo" class="p-2 rounded-full hover:bg-gray-100 flex items-center justify-center w-10 h-10 transition tooltip-container relative disabled:opacity-30 disabled:cursor-not-allowed" disabled>
+                    <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>
+                    <span class="tooltip">元に戻す</span>
+                </button>
+                <div class="w-px bg-gray-300 my-1"></div>
+                <button class="mode-btn active p-2 rounded-full hover:bg-gray-100 flex items-center justify-center w-10 h-10 transition tooltip-container relative" data-mode="view">
+                    <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    <span class="tooltip">視点移動</span>
+                </button>
+                <div class="w-px bg-gray-300 my-1"></div>
+                <button class="mode-btn p-2 rounded-full hover:bg-gray-100 flex items-center justify-center w-10 h-10 transition tooltip-container relative" data-mode="edit">
+                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                    <span class="tooltip">個別編集 (石をクリック)</span>
+                </button>
+                <div class="w-px bg-gray-300 my-1"></div>
+                <div class="flex items-center space-x-1 pl-1">
+                    <button class="mode-btn p-2 rounded-full hover:bg-gray-100 flex items-center justify-center w-10 h-10 transition tooltip-container relative" data-mode="insert_gold">
+                        <div class="w-5 h-5 rounded-full border-2 border-yellow-400 bg-yellow-200"></div>
+                        <span class="tooltip">ロンデル(金)挿入</span>
+                    </button>
+                    <button class="mode-btn p-2 rounded-full hover:bg-gray-100 flex items-center justify-center w-10 h-10 transition tooltip-container relative" data-mode="insert_silver">
+                        <div class="w-5 h-5 rounded-full border-2 border-gray-400 bg-gray-200"></div>
+                        <span class="tooltip">ロンデル(銀)挿入</span>
+                    </button>
+                </div>
+                <div class="w-px bg-gray-300 my-1"></div>
+                <button class="mode-btn p-2 rounded-full hover:bg-gray-100 flex items-center justify-center w-10 h-10 transition tooltip-container relative" data-mode="delete">
+                    <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    <span class="tooltip">パーツ削除</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 状態メッセージ -->
+        <div id="mode-message" class="absolute top-20 left-0 right-0 text-center pointer-events-none z-10 hidden">
+            <span class="bg-black/60 text-white px-4 py-2 rounded-full text-sm backdrop-blur">
+                編集するパーツをクリックしてください
+            </span>
+        </div>
+
+        <!-- 3D Canvas Container -->
+        <div id="canvas-container" class="w-full h-full canvas-container outline-none" tabindex="0"></div>
+    </main>
+
+    <!-- ======== モーダル群 ======== -->
+
+    <!-- 確認モーダル (汎用) -->
+    <div id="confirm-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-96 max-w-[90%] transform scale-95 transition-transform duration-200">
+            <h3 id="confirm-title" class="text-lg font-bold text-gray-800 mb-2">確認</h3>
+            <p id="confirm-message" class="text-gray-600 mb-6 text-sm">実行してもよろしいですか？</p>
+            <div class="flex justify-end space-x-3">
+                <button id="btn-confirm-cancel" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded text-sm transition">キャンセル</button>
+                <button id="btn-confirm-ok" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm font-bold transition">実行する</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 個別編集モーダル -->
+    <div id="edit-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-80 max-w-[90%] transform scale-95 transition-transform duration-200">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="edit-modal-title" class="text-lg font-bold text-gray-800">個別編集</h3>
+                <button id="btn-edit-close" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <input type="hidden" id="edit-part-id">
+            
+            <div class="space-y-4 text-sm">
+                <div id="edit-stone-fields" class="space-y-4">
+                    <div>
+                        <label class="block text-gray-700 mb-1">サイズ</label>
+                        <select id="edit-size" class="w-full border rounded p-2">
+                            <option value="6">6 mm</option>
+                            <option value="8">8 mm</option>
+                            <option value="10">10 mm</option>
+                            <option value="12">12 mm</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 mb-1">種類</label>
+                        <select id="edit-type" class="w-full border rounded p-2" onchange="updateEditColor()">
+                            <option value="crystal">水晶</option>
+                            <option value="amethyst">アメジスト</option>
+                            <option value="rosequartz">ローズクォーツ</option>
+                            <option value="turquoise">ターコイズ</option>
+                            <option value="onyx">オニキス</option>
+                            <option value="tigereye">タイガーアイ</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-gray-700 mb-1">色</label>
+                    <input type="color" id="edit-color" class="w-full h-10 border rounded cursor-pointer p-1">
+                </div>
+            </div>
+            
+            <div class="mt-6 flex justify-end space-x-3">
+                <button id="btn-edit-cancel" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded text-sm transition">キャンセル</button>
+                <button id="btn-edit-save" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-bold transition">更新する</button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Tooltip style */
+        .tooltip-container .tooltip {
+            visibility: hidden;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            text-align: center;
+            border-radius: 4px;
+            padding: 4px 8px;
+            position: absolute;
+            z-index: 1;
+            top: 120%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+            font-size: 12px;
+            pointer-events: none;
+        }
+        .tooltip-container:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+        .mode-btn.active {
+            background-color: #e0e7ff; /* indigo-100 */
+            border-color: #c7d2fe;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        }
+    </style>
+
+    <script>
+        // ======== 定義と設定 ========
+        const STONE_DEFS = {
+            crystal: { name: '水晶', defaultColor: '#ffffff', roughness: 0.1, transmission: 0.9, opacity: 0.8, transparent: true },
+            amethyst: { name: 'アメジスト', defaultColor: '#9966cc', roughness: 0.2, transmission: 0.6, opacity: 0.9, transparent: true },
+            rosequartz: { name: 'ローズクォーツ', defaultColor: '#ffb6c1', roughness: 0.2, transmission: 0.5, opacity: 0.9, transparent: true },
+            turquoise: { name: 'ターコイズ', defaultColor: '#40e0d0', roughness: 0.7, transmission: 0, opacity: 1.0, transparent: false },
+            onyx: { name: 'オニキス', defaultColor: '#1a1a1a', roughness: 0.3, transmission: 0, opacity: 1.0, transparent: false },
+            tigereye: { name: 'タイガーアイ', defaultColor: '#b87333', roughness: 0.4, transmission: 0, opacity: 1.0, transparent: false }
+        };
+
+        const RONDELLE_DEFS = {
+            gold: { name: 'ロンデル(金)', color: '#ffd700', metalness: 1.0, roughness: 0.2 },
+            silver: { name: 'ロンデル(銀)', color: '#e0e0e0', metalness: 1.0, roughness: 0.2 }
+        };
+
+        // アプリケーションの状態
+        let state = {
+            designName: '無題のデザイン',
+            circumference: 150, // mm
+            parts: [], // { id, type: 'stone'|'rondelle', size, stoneType, color, rondelleType }
+            mode: 'view' // view, edit, insert_gold, insert_silver, delete
+        };
+
+        // Undo機能用の履歴スタック
+        let historyStack = [];
+
+        function saveStateToHistory() {
+            historyStack.push(JSON.parse(JSON.stringify(state.parts)));
+            if (historyStack.length > 20) {
+                historyStack.shift(); // 履歴は直近20件まで保持
+            }
+            updateUndoButtonState();
+        }
+
+        function undo() {
+            if (historyStack.length > 0) {
+                state.parts = historyStack.pop();
+                postEditUpdate();
+                updateUndoButtonState();
+            }
+        }
+
+        function updateUndoButtonState() {
+            const btnUndo = document.getElementById('btn-undo');
+            if (btnUndo) {
+                btnUndo.disabled = historyStack.length === 0;
+            }
+        }
+
+        // Three.js 用変数
+        let scene, camera, renderer, controls;
+        let braceletGroup = new THREE.Group();
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+        let hoveredMesh = null;
+        const PART_THICKNESS_RONDELLE = 2.5; // ロンデルの厚み(mm)
+
+        // ======== 初期化 ========
+        document.addEventListener('DOMContentLoaded', () => {
+            initThreeJS();
+            loadData();
+            setupEventListeners();
+            updateUI();
+            
+            // 初回描画
+            if (state.parts.length === 0) {
+                // デフォルトデータ作成しない（ユーザーに作らせる）
+            } else {
+                buildBracelet3D();
+            }
+            updateUndoButtonState();
+        });
+
+        // ======== データ管理 ========
+        function generateId() {
+            return Math.random().toString(36).substr(2, 9);
+        }
+
+        function saveData() {
+            const nameInput = document.getElementById('design-name');
+            if (nameInput) state.designName = nameInput.value;
+            localStorage.setItem('braceletData', JSON.stringify(state));
+        }
+
+        function loadData() {
+            const saved = localStorage.getItem('braceletData');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (parsed && Array.isArray(parsed.parts)) {
+                        state = parsed;
+                        const nameInput = document.getElementById('design-name');
+                        if (nameInput && state.designName) {
+                            nameInput.value = state.designName;
+                        }
+                    }
+                } catch (e) {
+                    console.error("データの読み込みに失敗しました", e);
+                }
+            }
+        }
+
+        // ======== UI 更新 ========
+        function updateInitColor() {
+            const type = document.getElementById('init-type').value;
+            document.getElementById('init-color').value = STONE_DEFS[type].defaultColor;
+        }
+
+        function updateEditColor() {
+            const type = document.getElementById('edit-type').value;
+            document.getElementById('edit-color').value = STONE_DEFS[type].defaultColor;
+        }
+
+        function updateUI() {
+            // 内訳の集計
+            const summary = {};
+            let total = 0;
+            let totalLength = 0;
+            let maxStoneSize = 0;
+
+            state.parts.forEach(p => {
+                if (p.type === 'stone') {
+                    const name = `${STONE_DEFS[p.stoneType].name} (${p.size}mm)`;
+                    summary[name] = (summary[name] || 0) + 1;
+                    totalLength += p.size;
+                    if (p.size > maxStoneSize) maxStoneSize = p.size;
+                } else {
+                    const name = RONDELLE_DEFS[p.rondelleType].name;
+                    summary[name] = (summary[name] || 0) + 1;
+                    totalLength += PART_THICKNESS_RONDELLE;
+                }
+                total++;
+            });
+
+            // 推定内周の計算
+            let currentCircumferenceCm = "0.0";
+            if (total > 0) {
+                const effectiveThickness = maxStoneSize > 0 ? maxStoneSize : PART_THICKNESS_RONDELLE;
+                // 中心円の円周(totalLength) から 石の厚み分(直径×π) を引いて内周を近似計算
+                const currentCircumferenceMm = totalLength - (effectiveThickness * Math.PI);
+                currentCircumferenceCm = Math.max(0, currentCircumferenceMm / 10).toFixed(1);
+            }
+
+            document.getElementById('summary-total').innerText = total;
+            document.getElementById('summary-circumference').innerText = currentCircumferenceCm;
+            
+            const listEl = document.getElementById('summary-list');
+            listEl.innerHTML = '';
+            
+            if (total === 0) {
+                listEl.innerHTML = '<p class="text-gray-400 italic">パーツがありません</p>';
+            } else {
+                for (const [name, count] of Object.entries(summary)) {
+                    const div = document.createElement('div');
+                    div.className = 'flex justify-between border-b border-gray-100 pb-1';
+                    div.innerHTML = `<span>${name}</span><span class="font-bold">${count} 個</span>`;
+                    listEl.appendChild(div);
+                }
+            }
+        }
+
+        // ======== Three.js セットアップ ========
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+            
+            scene = new THREE.Scene();
+            // 背景色を白に
+            scene.background = new THREE.Color('#ffffff');
+            // フォグも白に合わせる
+            scene.fog = new THREE.FogExp2('#ffffff', 0.005);
+
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(0, 80, 80);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            // シャドウマップ有効化
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 20;
+            controls.maxDistance = 200;
+
+            // ライト設定
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(50, 100, 50);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+
+            const pointLight = new THREE.PointLight(0xffffff, 0.5);
+            pointLight.position.set(-50, -50, -50);
+            scene.add(pointLight);
+
+            // 中心を示す薄い円盤（台座）白背景に合わせて明るく調整
+            const planeGeo = new THREE.CylinderGeometry(40, 40, 1, 64);
+            const planeMat = new THREE.MeshStandardMaterial({ 
+                color: 0xeeeeee, 
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const plane = new THREE.Mesh(planeGeo, planeMat);
+            plane.position.y = -15;
+            plane.receiveShadow = true;
+            scene.add(plane);
+
+            scene.add(braceletGroup);
+
+            window.addEventListener('resize', onWindowResize, false);
+
+            animate();
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // ======== 3D モデル構築 ========
+        function clearBracelet() {
+            while(braceletGroup.children.length > 0){ 
+                const child = braceletGroup.children[0];
+                braceletGroup.remove(child); 
+                if(child.geometry) child.geometry.dispose();
+                if(child.material) child.material.dispose();
+            }
+        }
+
+        function buildBracelet3D() {
+            clearBracelet();
+
+            if (state.parts.length === 0) return;
+
+            // 各パーツの幅（円周上の長さ）を計算
+            let totalLength = 0;
+            state.parts.forEach(p => {
+                totalLength += (p.type === 'stone' ? p.size : PART_THICKNESS_RONDELLE);
+            });
+
+            // 円の半径を計算 (円周 = 直径 * PI)
+            // 実際のブレスレットはパーツの中心が円を描く。
+            const radius = totalLength / (2 * Math.PI);
+
+            let currentLength = 0;
+
+            state.parts.forEach((part, index) => {
+                const width = part.type === 'stone' ? part.size : PART_THICKNESS_RONDELLE;
+                
+                // パーツの中心角度
+                const angle = ((currentLength + width / 2) / totalLength) * Math.PI * 2;
+                
+                const x = Math.cos(angle) * radius;
+                const z = Math.sin(angle) * radius;
+
+                let mesh;
+
+                if (part.type === 'stone') {
+                    const def = STONE_DEFS[part.stoneType];
+                    const geo = new THREE.SphereGeometry(part.size / 2, 32, 32);
+                    const mat = new THREE.MeshPhysicalMaterial({
+                        color: new THREE.Color(part.color),
+                        metalness: def.metalness || 0,
+                        roughness: def.roughness || 0.5,
+                        transmission: def.transmission || 0,
+                        transparent: def.transparent || false,
+                        opacity: def.opacity || 1.0,
+                        clearcoat: 1.0,
+                        clearcoatRoughness: 0.1
+                    });
+                    mesh = new THREE.Mesh(geo, mat);
+                } else {
+                    const def = RONDELLE_DEFS[part.rondelleType];
+                    // 前後の石のサイズを見て、ロンデルの外径を少し小さくする
+                    let adjSize = 8; // default
+                    const prevPart = state.parts[(index - 1 + state.parts.length) % state.parts.length];
+                    if(prevPart && prevPart.type === 'stone') adjSize = prevPart.size;
+                    
+                    const outerRadius = (adjSize / 2) * 0.9;
+                    const tubeRadius = PART_THICKNESS_RONDELLE / 2;
+                    
+                    const rColor = part.color || def.color;
+                    
+                    const geo = new THREE.TorusGeometry(outerRadius - tubeRadius, tubeRadius, 16, 50);
+                    const mat = new THREE.MeshStandardMaterial({
+                        color: new THREE.Color(rColor),
+                        metalness: def.metalness,
+                        roughness: def.roughness
+                    });
+                    mesh = new THREE.Mesh(geo, mat);
+                    
+                    // ロンデルの向きを中心に向ける
+                    mesh.position.set(x, 0, z);
+                    mesh.lookAt(0, 0, 0);
+                    mesh.rotateY(Math.PI / 2); // 穴が接線方向を向くように
+                }
+
+                if(part.type === 'stone'){
+                    mesh.position.set(x, 0, z);
+                    // 球体なのでlookAtは不要
+                }
+
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                
+                // ユーザーデータに情報を保持（Raycaster用）
+                mesh.userData = { id: part.id, index: index, type: part.type };
+                
+                braceletGroup.add(mesh);
+
+                currentLength += width;
+            });
+        }
+
+        // ======== ロジック・イベント ========
+        function generateNewBracelet(circumference, size, stoneType, color) {
+            const targetLength = circumference * 10; // cm -> mm
+            const parts = [];
+            let currentLength = 0;
+            
+            // 目標の中心円周長 ＝ 内周 ＋ (石の直径 * PI)
+            const targetCenterCircumference = targetLength + (size * Math.PI);
+
+            while (currentLength < targetCenterCircumference) {
+                parts.push({
+                    id: generateId(),
+                    type: 'stone',
+                    size: size,
+                    stoneType: stoneType,
+                    color: color
+                });
+                currentLength += size;
+            }
+            return parts;
+        }
+
+        function setMode(newMode) {
+            state.mode = newMode;
+            
+            // UI 更新
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                if(btn.dataset.mode === newMode) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            const container = document.getElementById('canvas-container');
+            container.className = 'w-full h-full canvas-container outline-none'; // reset
+            
+            const msgEl = document.getElementById('mode-message');
+            const msgSpan = msgEl.querySelector('span');
+
+            if (newMode === 'view') {
+                controls.enabled = true;
+                msgEl.classList.add('hidden');
+            } else {
+                // 編集モード中はカメラ操作を無効にする（誤操作防止）
+                controls.enabled = false;
+                container.classList.add('mode-' + newMode.split('_')[0]); // mode-edit, mode-insert, mode-delete
+                
+                msgEl.classList.remove('hidden');
+                if (newMode === 'edit') msgSpan.innerText = "編集するパーツをクリックしてください";
+                else if (newMode === 'insert_gold') msgSpan.innerText = "石をクリックして、その隣にロンデル(金)を挿入します";
+                else if (newMode === 'insert_silver') msgSpan.innerText = "石をクリックして、その隣にロンデル(銀)を挿入します";
+                else if (newMode === 'delete') msgSpan.innerText = "削除するパーツをクリックしてください";
+            }
+        }
+
+        function setupEventListeners() {
+            // 新規作成
+            document.getElementById('btn-generate').addEventListener('click', () => {
+                if (state.parts.length > 0) {
+                    showConfirm("現在のデザインは破棄されます。新しく生成してもよろしいですか？", () => {
+                        execGenerate();
+                    });
+                } else {
+                    execGenerate();
+                }
+            });
+
+            function execGenerate() {
+                const circ = parseFloat(document.getElementById('init-circumference').value);
+                if (isNaN(circ) || circ < 10) {
+                    alert("内周を正しく入力してください");
+                    return;
+                }
+                const size = parseInt(document.getElementById('init-size').value);
+                const type = document.getElementById('init-type').value;
+                const color = document.getElementById('init-color').value;
+
+                saveStateToHistory();
+
+                state.circumference = circ;
+                state.parts = generateNewBracelet(circ, size, type, color);
+                
+                saveData();
+                buildBracelet3D();
+                updateUI();
+                setMode('view');
+            }
+
+            // 一括編集
+            document.getElementById('btn-bulk-size').addEventListener('click', () => {
+                saveStateToHistory();
+                const size = parseInt(document.getElementById('bulk-size').value);
+                state.parts.forEach(p => { if(p.type === 'stone') p.size = size; });
+                postEditUpdate();
+            });
+            document.getElementById('btn-bulk-type').addEventListener('click', () => {
+                saveStateToHistory();
+                const type = document.getElementById('bulk-type').value;
+                state.parts.forEach(p => { if(p.type === 'stone') p.stoneType = type; });
+                postEditUpdate();
+            });
+            document.getElementById('btn-bulk-color').addEventListener('click', () => {
+                saveStateToHistory();
+                const target = document.getElementById('bulk-color-target').value;
+                const color = document.getElementById('bulk-color').value;
+                state.parts.forEach(p => { if(p.type === target) p.color = color; });
+                postEditUpdate();
+            });
+
+            // 全データクリア
+            document.getElementById('btn-clear-data').addEventListener('click', () => {
+                showConfirm("すべてのデータを削除します。よろしいですか？", () => {
+                    saveStateToHistory();
+                    state.parts = [];
+                    state.designName = '無題のデザイン';
+                    document.getElementById('design-name').value = state.designName;
+                    saveData();
+                    buildBracelet3D();
+                    updateUI();
+                    setMode('view');
+                });
+            });
+
+            // エクスポート機能
+            document.getElementById('btn-export').addEventListener('click', () => {
+                if (state.parts.length === 0) {
+                    alert('保存するパーツがありません。');
+                    return;
+                }
+                const nameInput = document.getElementById('design-name');
+                state.designName = nameInput ? nameInput.value : '無題のデザイン';
+                
+                const exportData = JSON.stringify(state, null, 2);
+                const blob = new Blob([exportData], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                // ファイル名に使えない文字をアンダースコアに置換
+                const safeName = state.designName.replace(/[\\/:*?"<>|]/g, '_');
+                a.download = `${safeName}.json`;
+                a.click();
+                
+                URL.revokeObjectURL(url);
+            });
+
+            // インポート機能
+            const fileInput = document.getElementById('file-import');
+            document.getElementById('btn-import-trigger').addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const importedData = JSON.parse(event.target.result);
+                        if (importedData && Array.isArray(importedData.parts)) {
+                            saveStateToHistory();
+                            state = importedData;
+                            
+                            const nameInput = document.getElementById('design-name');
+                            if (nameInput) nameInput.value = state.designName || '無題のデザイン';
+                            
+                            postEditUpdate();
+                            setMode('view');
+                            setTimeout(() => alert('デザインを読み込みました。'), 100);
+                        } else {
+                            alert('無効なファイル形式です。ブレスレットのデータではありません。');
+                        }
+                    } catch (error) {
+                        alert('ファイルの読み込みに失敗しました。ファイルが壊れている可能性があります。');
+                        console.error(error);
+                    }
+                };
+                reader.readAsText(file);
+                // 選択をリセットして同じファイルを再度選べるようにする
+                e.target.value = '';
+            });
+
+            // デザイン名変更時に状態を自動保存
+            document.getElementById('design-name').addEventListener('change', (e) => {
+                state.designName = e.target.value;
+                saveData();
+            });
+
+            // Undoボタン
+            document.getElementById('btn-undo').addEventListener('click', () => {
+                undo();
+            });
+
+            // ツールバーモード切替
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    setMode(e.currentTarget.dataset.mode);
+                });
+            });
+
+            // Canvas クリックイベント
+            const container = document.getElementById('canvas-container');
+            container.addEventListener('click', onCanvasClick);
+            container.addEventListener('mousemove', onCanvasMouseMove);
+
+            // 個別編集モーダル
+            document.getElementById('btn-edit-close').addEventListener('click', closeEditModal);
+            document.getElementById('btn-edit-cancel').addEventListener('click', closeEditModal);
+            document.getElementById('btn-edit-save').addEventListener('click', () => {
+                const id = document.getElementById('edit-part-id').value;
+                const color = document.getElementById('edit-color').value;
+
+                const part = state.parts.find(p => p.id === id);
+                if (part) {
+                    saveStateToHistory();
+                    part.color = color;
+                    if (part.type === 'stone') {
+                        part.size = parseInt(document.getElementById('edit-size').value);
+                        part.stoneType = document.getElementById('edit-type').value;
+                    }
+                    postEditUpdate();
+                }
+                closeEditModal();
+            });
+
+            // 初期色合わせ
+            updateInitColor();
+        }
+
+        function postEditUpdate() {
+            saveData();
+            buildBracelet3D();
+            updateUI();
+        }
+
+        // ======== Raycaster インタラクション ========
+        function getIntersects(event) {
+            const container = document.getElementById('canvas-container');
+            const rect = container.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            // braceletGroup の子要素に対して判定
+            return raycaster.intersectObjects(braceletGroup.children);
+        }
+
+        function onCanvasMouseMove(event) {
+            if (state.mode === 'view') {
+                if (hoveredMesh) {
+                    resetMeshEmission(hoveredMesh);
+                    hoveredMesh = null;
+                }
+                return;
+            }
+
+            const intersects = getIntersects(event);
+            
+            if (intersects.length > 0) {
+                const mesh = intersects[0].object;
+                
+                // 編集モードと削除モードは石とロンデル両方に反応させる
+                // 挿入モードは石のみに反応させるのが自然なので石以外はスキップ
+                if ((state.mode === 'insert_gold' || state.mode === 'insert_silver') && mesh.userData.type !== 'stone') {
+                    if (hoveredMesh) resetMeshEmission(hoveredMesh);
+                    hoveredMesh = null;
+                    return;
+                }
+
+                if (hoveredMesh !== mesh) {
+                    if (hoveredMesh) resetMeshEmission(hoveredMesh);
+                    hoveredMesh = mesh;
+                    // ハイライト効果
+                    mesh.material.emissive = new THREE.Color(0x333333);
+                }
+            } else {
+                if (hoveredMesh) {
+                    resetMeshEmission(hoveredMesh);
+                    hoveredMesh = null;
+                }
+            }
+        }
+
+        function resetMeshEmission(mesh) {
+            if(mesh.material && mesh.material.emissive) {
+                mesh.material.emissive.setHex(0x000000);
+            }
+        }
+
+        function onCanvasClick(event) {
+            if (state.mode === 'view') return;
+
+            const intersects = getIntersects(event);
+            if (intersects.length > 0) {
+                const mesh = intersects[0].object;
+                const data = mesh.userData;
+
+                if (state.mode === 'edit') {
+                    openEditModal(data.id);
+                } 
+                else if ((state.mode === 'insert_gold' || state.mode === 'insert_silver') && data.type === 'stone') {
+                    saveStateToHistory();
+                    const rType = state.mode === 'insert_gold' ? 'gold' : 'silver';
+                    // クリックしたパーツの右隣に挿入
+                    state.parts.splice(data.index + 1, 0, {
+                        id: generateId(),
+                        type: 'rondelle',
+                        rondelleType: rType,
+                        color: RONDELLE_DEFS[rType].color
+                    });
+                    postEditUpdate();
+                }
+                else if (state.mode === 'delete') {
+                    saveStateToHistory();
+                    state.parts.splice(data.index, 1);
+                    postEditUpdate();
+                    if (hoveredMesh) hoveredMesh = null;
+                }
+            }
+        }
+
+        // ======== モーダル制御 ========
+        let confirmCallback = null;
+
+        function showConfirm(message, callback) {
+            document.getElementById('confirm-message').innerText = message;
+            const modal = document.getElementById('confirm-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            // アニメーション用
+            setTimeout(() => {
+                modal.children[0].classList.remove('scale-95');
+                modal.children[0].classList.add('scale-100');
+            }, 10);
+
+            confirmCallback = callback;
+
+            document.getElementById('btn-confirm-ok').onclick = () => {
+                const cb = confirmCallback;
+                closeConfirm();
+                if (cb) cb();
+            };
+            document.getElementById('btn-confirm-cancel').onclick = closeConfirm;
+        }
+
+        function closeConfirm() {
+            const modal = document.getElementById('confirm-modal');
+            modal.children[0].classList.remove('scale-100');
+            modal.children[0].classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }, 200);
+            confirmCallback = null;
+        }
+
+        function openEditModal(partId) {
+            const part = state.parts.find(p => p.id === partId);
+            if (!part) return;
+
+            document.getElementById('edit-part-id').value = part.id;
+            
+            const stoneFields = document.getElementById('edit-stone-fields');
+
+            if (part.type === 'stone') {
+                document.getElementById('edit-modal-title').innerText = "石の個別編集";
+                stoneFields.style.display = 'block';
+                document.getElementById('edit-size').value = part.size;
+                document.getElementById('edit-type').value = part.stoneType;
+                document.getElementById('edit-color').value = part.color;
+            } else {
+                document.getElementById('edit-modal-title').innerText = "ロンデルの個別編集";
+                stoneFields.style.display = 'none';
+                document.getElementById('edit-color').value = part.color || RONDELLE_DEFS[part.rondelleType].color;
+            }
+
+            const modal = document.getElementById('edit-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => {
+                modal.children[0].classList.remove('scale-95');
+                modal.children[0].classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeEditModal() {
+            const modal = document.getElementById('edit-modal');
+            modal.children[0].classList.remove('scale-100');
+            modal.children[0].classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }, 200);
+        }
+
+    </script>
+</body>
+</html>
