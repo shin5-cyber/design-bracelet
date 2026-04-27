@@ -9,11 +9,13 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
         body { font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; }
-        .canvas-container { cursor: grab; }
+        .canvas-container { cursor: grab; touch-action: none; }
         .canvas-container:active { cursor: grabbing; }
         .mode-edit .canvas-container { cursor: pointer; }
         .mode-insert .canvas-container { cursor: crosshair; }
         .mode-delete .canvas-container { cursor: not-allowed; }
+        .mode-reorder .canvas-container { cursor: grab; }
+        .mode-reorder .canvas-container:active { cursor: grabbing; }
         
         /* スクロールバーのカスタマイズ */
         ::-webkit-scrollbar { width: 8px; }
@@ -176,6 +178,11 @@
                 <button class="mode-btn active p-2 rounded-full hover:bg-gray-100 flex items-center justify-center w-10 h-10 transition tooltip-container relative" data-mode="view">
                     <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                     <span class="tooltip">視点移動</span>
+                </button>
+                <div class="w-px bg-gray-300 my-1"></div>
+                <button class="mode-btn p-2 rounded-full hover:bg-gray-100 flex items-center justify-center w-10 h-10 transition tooltip-container relative" data-mode="reorder">
+                    <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+                    <span class="tooltip">並び替え (ドラッグ)</span>
                 </button>
                 <div class="w-px bg-gray-300 my-1"></div>
                 <button class="mode-btn p-2 rounded-full hover:bg-gray-100 flex items-center justify-center w-10 h-10 transition tooltip-container relative" data-mode="edit">
@@ -682,10 +689,11 @@
             } else {
                 // 編集モード中はカメラ操作を無効にする（誤操作防止）
                 controls.enabled = false;
-                container.classList.add('mode-' + newMode.split('_')[0]); // mode-edit, mode-insert, mode-delete
+                container.classList.add('mode-' + newMode.split('_')[0]); // mode-edit, mode-insert, mode-delete, mode-reorder
                 
                 msgEl.classList.remove('hidden');
                 if (newMode === 'edit') msgSpan.innerText = "編集するパーツをクリックしてください";
+                else if (newMode === 'reorder') msgSpan.innerText = "パーツをドラッグして並び替えます";
                 else if (newMode === 'insert_gold') msgSpan.innerText = "石をクリックして、その隣にロンデル(金)を挿入します";
                 else if (newMode === 'insert_silver') msgSpan.innerText = "石をクリックして、その隣にロンデル(銀)を挿入します";
                 else if (newMode === 'delete') msgSpan.innerText = "削除するパーツをクリックしてください";
@@ -841,7 +849,9 @@
             // Canvas クリックイベント
             const container = document.getElementById('canvas-container');
             container.addEventListener('click', onCanvasClick);
-            container.addEventListener('mousemove', onCanvasMouseMove);
+            container.addEventListener('pointerdown', onPointerDown);
+            container.addEventListener('pointermove', onPointerMove);
+            container.addEventListener('pointerup', onPointerUp);
 
             // 個別編集モーダル
             document.getElementById('btn-edit-close').addEventListener('click', closeEditModal);
@@ -874,6 +884,9 @@
         }
 
         // ======== Raycaster インタラクション ========
+        let draggingMesh = null;
+        let dropTargetMesh = null;
+
         function getIntersects(event) {
             const container = document.getElementById('canvas-container');
             const rect = container.getBoundingClientRect();
@@ -885,7 +898,22 @@
             return raycaster.intersectObjects(braceletGroup.children);
         }
 
-        function onCanvasMouseMove(event) {
+        function onPointerDown(event) {
+            if (state.mode !== 'reorder') return;
+            
+            const container = document.getElementById('canvas-container');
+            container.setPointerCapture(event.pointerId);
+
+            const intersects = getIntersects(event);
+            if (intersects.length > 0) {
+                draggingMesh = intersects[0].object;
+                // ドラッグ開始時の視覚効果（少し浮かせ、色を暗くする）
+                draggingMesh.material.emissive.setHex(0x555555);
+                draggingMesh.position.y += 3;
+            }
+        }
+
+        function onPointerMove(event) {
             if (state.mode === 'view') {
                 if (hoveredMesh) {
                     resetMeshEmission(hoveredMesh);
@@ -893,6 +921,114 @@
                 }
                 return;
             }
+
+            if (state.mode === 'reorder') {
+                if (draggingMesh) {
+                    const intersects = getIntersects(event);
+                    let foundTarget = null;
+                    for (let i = 0; i < intersects.length; i++) {
+                        if (intersects[i].object !== draggingMesh) {
+                            foundTarget = intersects[i].object;
+                            break;
+                        }
+                    }
+
+                    if (dropTargetMesh !== foundTarget) {
+                        if (dropTargetMesh) {
+                            resetMeshEmission(dropTargetMesh);
+                        }
+                        dropTargetMesh = foundTarget;
+                        if (dropTargetMesh) {
+                            // ドロップターゲット（挿入先）を赤っぽくハイライト
+                            dropTargetMesh.material.emissive.setHex(0xaa3333);
+                        }
+                    }
+                } else {
+                    // ドラッグしていない時のホバー効果
+                    const intersects = getIntersects(event);
+                    if (intersects.length > 0) {
+                        const mesh = intersects[0].object;
+                        if (hoveredMesh !== mesh) {
+                            if (hoveredMesh) resetMeshEmission(hoveredMesh);
+                            hoveredMesh = mesh;
+                            mesh.material.emissive.setHex(0x333333);
+                        }
+                    } else {
+                        if (hoveredMesh) { resetMeshEmission(hoveredMesh); hoveredMesh = null; }
+                    }
+                }
+                return;
+            }
+
+            // 既存モード（edit, insert, delete）のホバー処理
+            const intersects = getIntersects(event);
+            
+            if (intersects.length > 0) {
+                const mesh = intersects[0].object;
+                
+                // 編集モードと削除モードは石とロンデル両方に反応させる
+                // 挿入モードは石のみに反応させるのが自然なので石以外はスキップ
+                if ((state.mode === 'insert_gold' || state.mode === 'insert_silver') && mesh.userData.type !== 'stone') {
+                    if (hoveredMesh) resetMeshEmission(hoveredMesh);
+                    hoveredMesh = null;
+                    return;
+                }
+
+                if (hoveredMesh !== mesh) {
+                    if (hoveredMesh) resetMeshEmission(hoveredMesh);
+                    hoveredMesh = mesh;
+                    // ハイライト効果
+                    mesh.material.emissive = new THREE.Color(0x333333);
+                }
+            } else {
+                if (hoveredMesh) {
+                    resetMeshEmission(hoveredMesh);
+                    hoveredMesh = null;
+                }
+            }
+        }
+
+        function onPointerUp(event) {
+            if (state.mode !== 'reorder') return;
+            
+            const container = document.getElementById('canvas-container');
+            container.releasePointerCapture(event.pointerId);
+
+            if (draggingMesh) {
+                if (dropTargetMesh) {
+                    const startIndex = draggingMesh.userData.index;
+                    const targetIndex = dropTargetMesh.userData.index;
+
+                    if (startIndex !== targetIndex) {
+                        saveStateToHistory();
+                        // 配列の要素を移動
+                        const item = state.parts.splice(startIndex, 1)[0];
+                        state.parts.splice(targetIndex, 0, item);
+                        postEditUpdate(); // 再描画
+                    } else {
+                        // 同じ場所なら元に戻す
+                        draggingMesh.position.y -= 3;
+                        resetMeshEmission(draggingMesh);
+                    }
+                    resetMeshEmission(dropTargetMesh);
+                    dropTargetMesh = null;
+                } else {
+                    // ドロップターゲットがない場合は元に戻す
+                    draggingMesh.position.y -= 3;
+                    resetMeshEmission(draggingMesh);
+                }
+                draggingMesh = null;
+            }
+        }
+
+        function resetMeshEmission(mesh) {
+            if(mesh && mesh.material && mesh.material.emissive) {
+                mesh.material.emissive.setHex(0x000000);
+            }
+        }
+
+        function onCanvasClick(event) {
+            if (state.mode === 'view' || state.mode === 'reorder') return;
 
             const intersects = getIntersects(event);
             
