@@ -191,6 +191,12 @@
                 </button>
                 <div class="w-px bg-gray-300 my-1"></div>
                 <div class="flex items-center space-x-1 pl-1">
+                    <button class="mode-btn p-2 rounded-full hover:bg-gray-100 flex items-center justify-center w-10 h-10 transition tooltip-container relative" data-mode="insert_stone">
+                        <div class="w-5 h-5 rounded-full border border-gray-400 bg-white flex items-center justify-center">
+                            <span class="text-gray-500 font-bold" style="font-size: 14px; line-height: 1;">+</span>
+                        </div>
+                        <span class="tooltip">天然石(1粒)挿入</span>
+                    </button>
                     <button class="mode-btn p-2 rounded-full hover:bg-gray-100 flex items-center justify-center w-10 h-10 transition tooltip-container relative" data-mode="insert_gold">
                         <div class="w-5 h-5 rounded-full border-2 border-yellow-400 bg-yellow-200"></div>
                         <span class="tooltip">ロンデル(金)挿入</span>
@@ -694,6 +700,7 @@
                 msgEl.classList.remove('hidden');
                 if (newMode === 'edit') msgSpan.innerText = "編集するパーツをクリックしてください";
                 else if (newMode === 'reorder') msgSpan.innerText = "パーツをドラッグして並び替えます";
+                else if (newMode === 'insert_stone') msgSpan.innerText = "石をクリックして、その隣に天然石(1粒)を挿入します";
                 else if (newMode === 'insert_gold') msgSpan.innerText = "石をクリックして、その隣にロンデル(金)を挿入します";
                 else if (newMode === 'insert_silver') msgSpan.innerText = "石をクリックして、その隣にロンデル(銀)を挿入します";
                 else if (newMode === 'delete') msgSpan.innerText = "削除するパーツをクリックしてください";
@@ -968,7 +975,7 @@
                 
                 // 編集モードと削除モードは石とロンデル両方に反応させる
                 // 挿入モードは石のみに反応させるのが自然なので石以外はスキップ
-                if ((state.mode === 'insert_gold' || state.mode === 'insert_silver') && mesh.userData.type !== 'stone') {
+                if ((state.mode === 'insert_gold' || state.mode === 'insert_silver' || state.mode === 'insert_stone') && mesh.userData.type !== 'stone') {
                     if (hoveredMesh) resetMeshEmission(hoveredMesh);
                     hoveredMesh = null;
                     return;
@@ -1031,42 +1038,6 @@
             if (state.mode === 'view' || state.mode === 'reorder') return;
 
             const intersects = getIntersects(event);
-            
-            if (intersects.length > 0) {
-                const mesh = intersects[0].object;
-                
-                // 編集モードと削除モードは石とロンデル両方に反応させる
-                // 挿入モードは石のみに反応させるのが自然なので石以外はスキップ
-                if ((state.mode === 'insert_gold' || state.mode === 'insert_silver') && mesh.userData.type !== 'stone') {
-                    if (hoveredMesh) resetMeshEmission(hoveredMesh);
-                    hoveredMesh = null;
-                    return;
-                }
-
-                if (hoveredMesh !== mesh) {
-                    if (hoveredMesh) resetMeshEmission(hoveredMesh);
-                    hoveredMesh = mesh;
-                    // ハイライト効果
-                    mesh.material.emissive = new THREE.Color(0x333333);
-                }
-            } else {
-                if (hoveredMesh) {
-                    resetMeshEmission(hoveredMesh);
-                    hoveredMesh = null;
-                }
-            }
-        }
-
-        function resetMeshEmission(mesh) {
-            if(mesh.material && mesh.material.emissive) {
-                mesh.material.emissive.setHex(0x000000);
-            }
-        }
-
-        function onCanvasClick(event) {
-            if (state.mode === 'view') return;
-
-            const intersects = getIntersects(event);
             if (intersects.length > 0) {
                 const mesh = intersects[0].object;
                 const data = mesh.userData;
@@ -1074,6 +1045,18 @@
                 if (state.mode === 'edit') {
                     openEditModal(data.id);
                 } 
+                else if (state.mode === 'insert_stone' && data.type === 'stone') {
+                    saveStateToHistory();
+                    // デフォルトの石を挿入（水晶、8mm）
+                    state.parts.splice(data.index + 1, 0, {
+                        id: generateId(),
+                        type: 'stone',
+                        size: 8,
+                        stoneType: 'crystal',
+                        color: STONE_DEFS['crystal'].defaultColor
+                    });
+                    postEditUpdate();
+                }
                 else if ((state.mode === 'insert_gold' || state.mode === 'insert_silver') && data.type === 'stone') {
                     saveStateToHistory();
                     const rType = state.mode === 'insert_gold' ? 'gold' : 'silver';
